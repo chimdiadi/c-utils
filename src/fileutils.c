@@ -11,19 +11,19 @@
 #include <dirent.h>         /* */
 #include <errno.h>
 
-#ifdef __unix__
-    #include <sys/stat.h>
-    #define GET_CURRENT_WORKING_DIR         getcwd
-    #define REMOVE_DIR                      rmdir
-    #define MAKE_DIR                        mkdir
-    #define SEP                             '/'
-#elif defined(_WIN32) || defined(WIN32)
+#ifdef defined(_WIN32) || defined(WIN32)
     #include <direct.h>
     #define OS_WINDOWS
     #define GET_CURRENT_WORKING_DIR         _getcwd
     #define REMOVE_DIR                      _rmdir
     #define MAKE_DIR                        _mkdir
     #define SEP                             '\\'
+#else
+    #include <sys/stat.h>
+    #define GET_CURRENT_WORKING_DIR         getcwd
+    #define REMOVE_DIR                      rmdir
+    #define MAKE_DIR                        mkdir
+    #define SEP                             '/'
 #endif
 
 #include "fileutils.h"
