@@ -11,7 +11,7 @@
 #include <dirent.h>         /* */
 #include <errno.h>
 
-#ifdef defined(_WIN32) || defined(WIN32)
+#if defined(_WIN32) || defined(WIN32)
     #include <direct.h>
     #define OS_WINDOWS
     #define GET_CURRENT_WORKING_DIR         _getcwd
