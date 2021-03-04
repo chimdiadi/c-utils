@@ -7,10 +7,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>         /* getcwd */
-#include <sys/stat.h>
 #include <fcntl.h>          /* O_CREAT */
 #include <dirent.h>         /* */
 #include <errno.h>
+
+#ifdef __unix__
+    #include <sys/stat.h>
+    #define GET_CURRENT_WORKING_DIR         getcwd
+    #define REMOVE_DIR                      rmdir
+    #define MAKE_DIR                        mkdir
+    #define SEP                             '/'
+#elif defined(_WIN32) || defined(WIN32)
+    #include <direct.h>
+    #define OS_WINDOWS
+    #define GET_CURRENT_WORKING_DIR         _getcwd
+    #define REMOVE_DIR                      _rmdir
+    #define MAKE_DIR                        _mkdir
+    #define SEP                             '\\'
+#endif
+
 #include "fileutils.h"
 
 
@@ -86,12 +101,12 @@ char* fs_resolve_path(const char* path) {
 
     char* new_path = NULL;
     char* tmp = __str_duplicate(path);
-    int pos = __str_find_reverse(tmp, '/');
+    int pos = __str_find_reverse(tmp, SEP);
 
     if (pos == -1) {
         char* cwd = fs_cwd();
         new_path = (char*)calloc(strlen(cwd) + 2 + strlen(path), sizeof(char));
-        snprintf(new_path, strlen(cwd) + 2 + strlen(path), "%s/%s", cwd, path);
+        snprintf(new_path, strlen(cwd) + 2 + strlen(path), "%s%c%s", cwd, SEP, path);
         free(cwd);
     }
 
@@ -102,19 +117,19 @@ char* fs_resolve_path(const char* path) {
             char* s = tmp + (pos + 1);
             int p_len = strlen(p), t_len = strlen(s);
             new_path = (char*)calloc(p_len + t_len + 3, sizeof(char));  /* include slash x2 and \0 */
-            snprintf(new_path, p_len + 2 + t_len, "%s/%s", p, s);
+            snprintf(new_path, p_len + 2 + t_len, "%s%c%s", p, SEP, s);
             free(p);
             break;
         }
-        int tmp_pos = __str_find_reverse(tmp, '/');
-        pos[tmp] = '/';
+        int tmp_pos = __str_find_reverse(tmp, SEP);
+        pos[tmp] = SEP;
         pos = tmp_pos;
     }
     free(tmp);
 
     /* ensure no trailing '/' */
     int len = strlen(new_path);
-    if (new_path[len - 1] == '/')
+    if (new_path[len - 1] == SEP)
         new_path[len - 1] = '\0';
 
     return new_path;
@@ -145,10 +160,10 @@ char* fs_combine_filepath_alt(const char* path, const char* filename, char* res)
         res = (char*)calloc(p_len + f_len + 2, sizeof(char)); /* 2 for / and NULL */
 
     strcpy(res, path);
-    if (res[p_len - 1] == '/') {
+    if (res[p_len - 1] == SEP) {
         --p_len;
     }
-    res[p_len] = '/';
+    res[p_len] = SEP;
     strcpy(res + 1 + p_len, filename);
 
     return res;
@@ -158,7 +173,7 @@ char* fs_cwd() {
     size_t malsize = 16; /* some defult power of 2... */
     char* buf = (char*)malloc(malsize * sizeof(char));
     errno = 0;
-    while(getcwd(buf, malsize) == NULL && errno == ERANGE) {
+    while(GET_CURRENT_WORKING_DIR(buf, malsize) == NULL && errno == ERANGE) {
         malsize *= 2;
         char* tmp = (char*)realloc(buf, malsize * sizeof(char));
         buf = tmp;
@@ -245,20 +260,20 @@ int fs_mkdir_alt(const char* path, bool recursive, mode_t mode) {
     /* add a trailing '/' for the loop to work! */
     len = strlen(new_path);
     char* tmp = (char*)realloc(new_path, len + 2);
-    tmp[len] = '/';
+    tmp[len] = SEP;
     tmp[len + 1] = '\0';
     new_path = tmp;
     tmp = NULL;
 
     char* p;
-    for (p = strchr(new_path + 1, '/'); p != NULL; p = strchr(p + 1, '/')) {
+    for (p = strchr(new_path + 1, SEP); p != NULL; p = strchr(p + 1, SEP)) {
         *p = '\0';
         int res = __fs_mkdir(new_path, mode);
         if (res == FS_FAILURE) {
             free(new_path);
             return FS_FAILURE;
         }
-        *p = '/';
+        *p = SEP;
     }
     free(new_path);
     return FS_SUCCESS;
@@ -508,7 +523,7 @@ const char* f_read_file(file_t f) {
     int blen = strlen(f->basepath), flen = strlen(f->filename);
     char* full_path = (char*)calloc(blen + flen + 2, sizeof(char)); /* '/' and '\0' */
     strcpy(full_path, f->basepath);
-    full_path[blen] = '/';
+    full_path[blen] = SEP;
     strcpy(full_path + blen + 1, f->filename);
 
     FILE* fobj = fopen(full_path, "rb");
@@ -710,7 +725,7 @@ char** d_dirs_full_path(dir_t d) {
 *******************************************************************************/
 static int __fs_mkdir(const char* path, mode_t mode) {
     errno = 0;
-    int res = mkdir(path, mode);
+    int res = MAKE_DIR(path, mode);
     if (res == -1) {
         if (errno != EEXIST) {
             return FS_FAILURE;
@@ -721,7 +736,7 @@ static int __fs_mkdir(const char* path, mode_t mode) {
 
 static int __fs_rmdir(const char* path) {
     errno = 0;
-    int res = rmdir(path);
+    int res = REMOVE_DIR(path);
     if (res == -1) {
         if (errno == EEXIST || errno == ENOTEMPTY)
             return FS_NOT_EMPTY;
@@ -867,7 +882,7 @@ static void __parse_file_info(const char* full_filepath, char** filepath, char**
 
     int pathlen = strlen(full_filepath);
 
-    int slash_loc = __str_find_reverse(full_filepath, '/');
+    int slash_loc = __str_find_reverse(full_filepath, SEP);
     if (slash_loc == -1) {
         (*filepath) = __str_duplicate(".");
         (*filename) = __str_duplicate(full_filepath);
